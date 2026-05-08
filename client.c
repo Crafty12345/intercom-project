@@ -22,17 +22,31 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <linux/input.h>
 #include <time.h>
+#include <fcntl.h>
 
-#include "new_client.h"
+#include "client.h"
 #include "capture.h"
+#include "config.h"
 
 #define PORT 9999
-#define TARGET_ADDR "127.0.0.1"
+// Keyboard filename
+#define KB_FILENAME "/dev/input/by-id/usb-Razer_Razer_Ornata_V3_X-if01-event-kbd"
 
 int sockfd;
 struct thread_data *td;
 pthread_mutex_t sockMutex = PTHREAD_MUTEX_INITIALIZER;
+struct sockaddr_in server;
+int keyboardFp;
+char* targetIP;
+RoomConfig* cfg;
+bool keyHeld;
+time_t startTime;
+int numTimersRunning;
+bool connectionClosed;
+bool isReadingEvent;
+struct input_event latestEvent;
 
 void interrupt_handler(int signum)
 {
@@ -43,24 +57,35 @@ void interrupt_handler(int signum)
     free(td->DATA);
     free(td->writePtr);
     free(td);
+    if (cfg != NULL) {
+        rc_free(cfg);
+    }
+    if (keyboardFp != 0) {
+        close(keyboardFp);
+    }
     exit(signum);
 }
 
 void *send_data(void *param)  // interprets void *param as a socket file descriptor
 {
-    int sockfd = *(int *) param;
+    //int sockfd = *(int *) param;
     int readPtr = *td->writePtr;
     int rv;
 
     unsigned long bytes_to_send = td->CHUNK_SIZE * sizeof(td->DATA[0]);
-    while (1) {
+    while (isAnyKeyHeld()) {
         pthread_mutex_lock(&td->mutex);
         while (readPtr == *td->writePtr) {  // wait for buffer to advance
             pthread_cond_wait(&td->cond, &td->mutex);
         }
         pthread_mutex_unlock(&td->mutex);
+        while (!isAnyKeyHeld()) {
+            printf("Waiting for key to be pressed\n");
+            usleep(10000);
+        }
         pthread_mutex_lock(&sockMutex);
         if ((rv = send(sockfd, td->DATA + readPtr, bytes_to_send, MSG_NOSIGNAL)) == -1) {
+            printf("Data thread: sockfd=%d\n", sockfd);
             perror("send");
             close(sockfd);
             return NULL;
@@ -72,21 +97,58 @@ void *send_data(void *param)  // interprets void *param as a socket file descrip
         }
         readPtr = (readPtr + td->CHUNK_SIZE) % td->BUFFER_SIZE;
     }
+    return NULL;
 }
 
+bool isAnyKeyHeld() {
+    return numTimersRunning > 0;
+}
 
+void* timerLoop(void* pArgs) {
+    time_t stop;
+    int threshold;
+    int elapsedTime;
+    // int yes;
+    // yes = 1;
+
+    numTimersRunning++;
+    keyHeld = true;
+    threshold = 2;
+    stop = time(NULL);
+    elapsedTime = stop - startTime;
+    while (elapsedTime < threshold) {
+        stop = time(NULL);
+        elapsedTime = stop - startTime;
+        //printf("Time elapsed: %d\n", threshold);
+    }
+    numTimersRunning--;
+    return NULL;
+}
+
+void* getEventNonBlocking(void* pArg) {
+    isReadingEvent = true;
+    int keyboardFp = *(int*)pArg;
+    read(keyboardFp, &latestEvent, sizeof(struct input_event));
+    isReadingEvent = false;
+    return NULL;
+}
 
 int main(int argc, char *argv[])
 {
     const int CHUNK_SIZE = 128;
     const int BUFFER_SIZE = CHUNK_SIZE * 16;
 
+    pthread_t serveThread;
     int connectionStatus;
-    // struct addrinfo hints, *servinfo;
-    // struct sockaddr_storage their_addr;
-    struct sockaddr_in server;
-    // socklen_t sin_size = sizeof their_addr;
+    char selectedIP[32];
+    int selectedRoom;
+    numTimersRunning = 0;
     int yes = 1;
+
+    connectionClosed = false;
+
+    cfg = rc_load("./rooms.cfg");
+    keyboardFp = open(KB_FILENAME, O_RDONLY);
 
     connectionStatus = -1;
 
@@ -105,7 +167,6 @@ int main(int argc, char *argv[])
     server.sin_family = AF_INET;
     
     server.sin_port = htons(PORT);
-    server.sin_addr.s_addr = inet_addr(TARGET_ADDR);
 
     signal(SIGINT, interrupt_handler);  // Register the interrupt handler
 
@@ -125,22 +186,32 @@ int main(int argc, char *argv[])
 
     while (1) {
         //pthread_mutex_lock(&sockMutex);
-        connectionStatus = connect(sockfd, (struct sockaddr*)&server, sizeof server);
-        //pthread_mutex_unlock(&sockMutex);
-        while (connectionStatus == -1) {
-            usleep(10000);
+        if (!isReadingEvent) {
+            pthread_t eventThread;
+            eventThread = pthread_create(&eventThread, NULL, getEventNonBlocking, &keyboardFp);
+        }
+        if (latestEvent.type == 1) {
+            selectedRoom = latestEvent.code - 1;
+            if ((selectedRoom >= 1) && (selectedRoom <= 10)) {
+                if (rc_containsRoom(cfg, selectedRoom)) {
+                    //printf("Main thread: sockfd=%d\n", sockfd);
+                    strcpy(selectedIP, rc_getIP(cfg, selectedRoom));
+                    server.sin_addr.s_addr = inet_addr(selectedIP);
+                    connectionStatus = connect(sockfd, (struct sockaddr*)&server, sizeof server);
+                    keyHeld = true;
+                    startTime = time(NULL);
+                    // TODO: timer limit
+                    pthread_t timerThread;
+                    pthread_create(&timerThread, NULL, timerLoop, NULL);
+
+                    if (connectionStatus == 0) {
+                        printf("connectionStatus=%d\n", connectionStatus);
+                        pthread_create(&serveThread, NULL, send_data, NULL);
+                    }
+                }
+            }
         }
         
-        printf("connectionStatus=%d\n", connectionStatus);
-        pthread_t serveThread;
-        pthread_create(&serveThread, NULL, send_data, &sockfd);
-        
-
-        //new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-
-        //printf("Connection from %s.\n", s);
-        //pthread_t serve_thread;
-        //pthread_create(&serve_thread, NULL, send_data, &new_fd);
     }
 
     close(sockfd);

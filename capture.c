@@ -18,7 +18,7 @@
 #include <signal.h>
 #include <alsa/asoundlib.h>
 
-#include "server.h"
+#include "client.h"
 
 void* record(void *param)
 {

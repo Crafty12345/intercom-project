@@ -39,7 +39,6 @@ def runSocketConnectiion(pPort, pAudioStream):
             while 1:
                 try:
                     frame = buff.get(True, 5)  # blocking get with 5 second timeout
-                    print(frame)
                 except queue.Empty:
                     #print("End of stream")
                     break
