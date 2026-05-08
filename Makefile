@@ -1,4 +1,4 @@
-server: server.c capture.c server.h capture.h
-	gcc -pthread -o server server.c capture.c -lasound -Wall -Werror
+client: client.c capture.c client.h capture.h
+	gcc -pthread -o client client.c capture.c -lasound -Wall -Werror
 all:
-	server
+	client

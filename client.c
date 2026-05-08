@@ -22,14 +22,17 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 
-#include "server.h"
+#include "new_client.h"
 #include "capture.h"
 
-#define PORT "1234"
+#define PORT 9999
+#define TARGET_ADDR "127.0.0.1"
 
 int sockfd;
 struct thread_data *td;
+pthread_mutex_t sockMutex = PTHREAD_MUTEX_INITIALIZER;
 
 void interrupt_handler(int signum)
 {
@@ -56,11 +59,13 @@ void *send_data(void *param)  // interprets void *param as a socket file descrip
             pthread_cond_wait(&td->cond, &td->mutex);
         }
         pthread_mutex_unlock(&td->mutex);
+        pthread_mutex_lock(&sockMutex);
         if ((rv = send(sockfd, td->DATA + readPtr, bytes_to_send, MSG_NOSIGNAL)) == -1) {
             perror("send");
             close(sockfd);
             return NULL;
         }
+        pthread_mutex_unlock(&sockMutex);
 
         if (rv != bytes_to_send) {
             fprintf(stderr, "Error: only sent %d out of %lu bytes", rv, bytes_to_send);
@@ -76,27 +81,17 @@ int main(int argc, char *argv[])
     const int CHUNK_SIZE = 128;
     const int BUFFER_SIZE = CHUNK_SIZE * 16;
 
-    int new_fd;
-    struct addrinfo hints, *servinfo;
-    struct sockaddr_storage their_addr;
-    socklen_t sin_size = sizeof their_addr;
+    int connectionStatus;
+    // struct addrinfo hints, *servinfo;
+    // struct sockaddr_storage their_addr;
+    struct sockaddr_in server;
+    // socklen_t sin_size = sizeof their_addr;
     int yes = 1;
-    char s[INET_ADDRSTRLEN];
-    int rv; // return value
 
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE; // use my IP
-
-    // Fill the servinfo struct
-    if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
-    }
+    connectionStatus = -1;
 
     // Open the socket
-    if ((sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol)) == -1) {
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("server: socket");
         return 1;
     }
@@ -107,21 +102,10 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Bind the socket
-    if (bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) == -1) {
-        close(sockfd);
-        perror("server: bind");
-        return 1;
-    }
-
-    freeaddrinfo(servinfo); // Done with this struct
-
-    if (listen(sockfd, 5) == -1) {  // Up to 5 connections
-        perror("listen");
-        return 1;
-    }
-
-    printf("Server started on port %s.\n", PORT);
+    server.sin_family = AF_INET;
+    
+    server.sin_port = htons(PORT);
+    server.sin_addr.s_addr = inet_addr(TARGET_ADDR);
 
     signal(SIGINT, interrupt_handler);  // Register the interrupt handler
 
@@ -140,14 +124,26 @@ int main(int argc, char *argv[])
     pthread_create(&record_thread, NULL, record, td);
 
     while (1) {
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+        //pthread_mutex_lock(&sockMutex);
+        connectionStatus = connect(sockfd, (struct sockaddr*)&server, sizeof server);
+        //pthread_mutex_unlock(&sockMutex);
+        while (connectionStatus == -1) {
+            usleep(10000);
+        }
+        
+        printf("connectionStatus=%d\n", connectionStatus);
+        pthread_t serveThread;
+        pthread_create(&serveThread, NULL, send_data, &sockfd);
+        
 
-        inet_ntop(their_addr.ss_family, &(((struct sockaddr_in*)&their_addr)->sin_addr), s, sizeof s);
-        printf("Connection from %s.\n", s);
+        //new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
 
-        pthread_t serve_thread;
-        pthread_create(&serve_thread, NULL, send_data, &new_fd);
+        //printf("Connection from %s.\n", s);
+        //pthread_t serve_thread;
+        //pthread_create(&serve_thread, NULL, send_data, &new_fd);
     }
+
+    close(sockfd);
 
     return 0; // who comes here?
 }

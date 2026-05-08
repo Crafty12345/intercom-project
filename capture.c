@@ -36,7 +36,12 @@ void* record(void *param)
     /* Name of the PCM device        */
     /* First number is the soundcard */
     /* Second number is the device   */
-    char *pcm_name = strdup("plughw:0,0");
+    char *pcm_name = strdup("plughw:1,0");
+    char* name;
+    
+    snd_card_get_name(1, &name);
+
+    printf("Name=%s\n", name);
 
     snd_pcm_hw_params_alloca(&hw_params);
 
@@ -52,7 +57,7 @@ void* record(void *param)
         return (void *)1;
     }
 
-    unsigned int rate = 48000; /* Sample rate */
+    unsigned int rate = 44100; /* Sample rate */
     unsigned int exact_rate;
 
     if (snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0) {

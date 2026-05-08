@@ -1,3 +1,7 @@
+Intercom Project
+=============
+A fork of Stream-Server, which aims to adapt the existing code to behave as an intercom. The client captures audio, and sends it to the server.
+
 Stream-Server
 =============
 

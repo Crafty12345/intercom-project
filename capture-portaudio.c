@@ -18,7 +18,7 @@
 #include <portaudio.h>
 
 #include "server.h"
-
+#define DEVICE_INDEX 1
 
 PaStream *stream;
 
@@ -32,6 +32,7 @@ void record_thread_interrupt_handler(int signum) {
 void* record(void *param) 
 {
     struct thread_data* td = (struct thread_data *) param;
+    int i;
 
     PaError err;
     if ((err = Pa_Initialize()) != paNoError) {
@@ -40,7 +41,13 @@ void* record(void *param)
     }
 
     PaStreamParameters inputParameters;
-    inputParameters.device = Pa_GetDefaultInputDevice();
+
+    for (i = 0; i < Pa_GetDeviceCount(); i++) {
+        printf("Device %d: %s\n", i, Pa_GetDeviceInfo(i)->name);
+    }
+    //const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(i);
+
+    inputParameters.device = DEVICE_INDEX;
     inputParameters.channelCount = 1;
     inputParameters.sampleFormat = paInt16;
     inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultHighInputLatency;
