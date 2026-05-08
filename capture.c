@@ -80,13 +80,18 @@ void* record(void *param)
     }
 
 
-    snd_pcm_uframes_t value;
-    value = 50;
+    // snd_pcm_uframes_t value;
+    // value = 50;
 
-    if (snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &value, NULL) < 0) {
+    if (snd_pcm_hw_params_set_period_size(pcm_handle, hw_params, 50, 0) < 0) {
         fprintf(stderr, "Error setting period size.\n");
         return (void *)1;
     }
+
+    // if (snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &value, NULL) < 0) {
+    //     fprintf(stderr, "Error setting period size.\n");
+    //     return (void *)1;
+    // }
 
     if (snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 1) < 0) {
         fprintf(stderr, "Error setting channels.\n");

@@ -29,10 +29,9 @@
 #include "client.h"
 #include "capture.h"
 #include "config.h"
+#include "device_data.h"
 
 #define PORT 9999
-// Keyboard filename
-#define KB_FILENAME "/dev/input/by-path/platform-i8042-serio-0-event-kbd"
 
 int sockfd;
 struct thread_data *td;
@@ -148,6 +147,7 @@ int main(int argc, char *argv[])
     connectionClosed = false;
 
     cfg = rc_load("./rooms.cfg");
+    // defined in device_data.h
     keyboardFp = open(KB_FILENAME, O_RDONLY);
     if (keyboardFp == -1) {
         perror("Unable to open keyboard device");
@@ -168,8 +168,6 @@ int main(int argc, char *argv[])
     }
 
     server.sin_family = AF_INET;
-    
-    server.sin_port = htons(PORT);
 
     signal(SIGINT, interrupt_handler);  // Register the interrupt handler
 
@@ -200,6 +198,7 @@ int main(int argc, char *argv[])
                     //printf("Main thread: sockfd=%d\n", sockfd);
                     strcpy(selectedIP, rc_getIP(cfg, selectedRoom));
                     server.sin_addr.s_addr = inet_addr(selectedIP);
+                    server.sin_port = htons(rc_getPort(cfg, selectedRoom));
                     connectionStatus = connect(sockfd, (struct sockaddr*)&server, sizeof server);
                     keyHeld = true;
                     startTime = time(NULL);

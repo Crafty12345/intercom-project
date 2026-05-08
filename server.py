@@ -66,7 +66,7 @@ for i in range(p.get_device_count()):
     print(f"{i}: {p.get_device_info_by_index(i)['name']}")
 
 
-DEVICE_INDEX=5
+DEVICE_INDEX=16
 NUM_CHANNELS = 1
 SAMPLE_RATE = 44100
 
