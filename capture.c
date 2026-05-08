@@ -79,7 +79,11 @@ void* record(void *param)
         fprintf(stderr, "The rate %d Hz is not supported by your hardware.\n ==> Using %d Hw isntead.\n", rate, exact_rate);
     }
 
-    if (snd_pcm_hw_params_set_period_size(pcm_handle, hw_params, 50, 0) < 0) {
+
+    snd_pcm_uframes_t value;
+    value = 50;
+
+    if (snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &value, NULL) < 0) {
         fprintf(stderr, "Error setting period size.\n");
         return (void *)1;
     }

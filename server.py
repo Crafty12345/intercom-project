@@ -60,7 +60,13 @@ s.listen(5)
 #t.start() # begin receiving data
 
 p = pyaudio.PyAudio()
-DEVICE_INDEX=16
+
+print("Output devices:")
+for i in range(p.get_device_count()):
+    print(f"{i}: {p.get_device_info_by_index(i)['name']}")
+
+
+DEVICE_INDEX=5
 NUM_CHANNELS = 1
 SAMPLE_RATE = 44100
 

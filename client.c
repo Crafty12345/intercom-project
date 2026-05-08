@@ -32,7 +32,7 @@
 
 #define PORT 9999
 // Keyboard filename
-#define KB_FILENAME "/dev/input/by-id/usb-Razer_Razer_Ornata_V3_X-if01-event-kbd"
+#define KB_FILENAME "/dev/input/by-path/platform-i8042-serio-0-event-kbd"
 
 int sockfd;
 struct thread_data *td;
@@ -149,6 +149,9 @@ int main(int argc, char *argv[])
 
     cfg = rc_load("./rooms.cfg");
     keyboardFp = open(KB_FILENAME, O_RDONLY);
+    if (keyboardFp == -1) {
+        perror("Unable to open keyboard device");
+    }
 
     connectionStatus = -1;
 
