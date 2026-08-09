@@ -16,4 +16,9 @@ def selectDevice(pName: str) -> int:
         currentDevice = temp.get_device_info_by_index(i)
         if (currentDevice["name"] == pName):
                 deviceIndex = i
+    if (deviceIndex == -1):
+        raise LookupError("Device with name '%s' not found" % pName)
+    else:
+        print("Located output device '%s' with index %d" % (pName, deviceIndex))
+
     return deviceIndex
