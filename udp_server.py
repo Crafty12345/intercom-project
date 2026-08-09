@@ -1,19 +1,21 @@
 import pyaudio
 import socket
 
+import config
 from helper import *
 
-IP = "127.0.0.1"
+IP = "192.168.4.98"
 PORT = 5000
-CHUNK = 1024*8
-NUM_CHUNKS = 4
-SAMPLE_RATE = 44100
+CHUNK = config.CLIENT_CHUNK_SIZE * 4
+SAMPLE_RATE = config.SAMPLE_RATE
 
-OUTPUT_DEVICE = "pipewire"
+OUTPUT_DEVICE = config.OUTPUT_DEVICE
 
 running = True
 
+#print("Hostname=%s" % socket.gethostname())
 conn = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
 
 conn.bind((IP,  PORT))
 
@@ -29,7 +31,7 @@ else:
 
 audio = pyaudio.PyAudio()
 stream = audio.open(format=pyaudio.paInt16, 
-                    channels=1, 
+                    channels=config.CHANNELS, 
                     rate=SAMPLE_RATE, 
                     output=True, 
                     output_device_index=deviceIndex)
