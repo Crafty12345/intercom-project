@@ -6,15 +6,16 @@ from threading import Thread, Event
 import secrets
 
 import config
+from protocol import Signal, HEADER_SIZE
 from helper import *
 
 FORMAT = pyaudio.paInt16
 CLIENT_CHUNK = config.CLIENT_CHUNK_SIZE
 # Make sure SERVER_CHUNK is much greater than CLIENT_CHUNK
-SERVER_CHUNK = CLIENT_CHUNK * 4
+SERVER_CHUNK = CLIENT_CHUNK * 2
 
 # TODO: Replace this with a cryptographically secure sequence of bytes
-stopSignal = secrets.token_bytes(CLIENT_CHUNK)
+stopToken = secrets.token_bytes(CLIENT_CHUNK - HEADER_SIZE)
 
 selectedIp: str | None = None
 
@@ -31,7 +32,6 @@ hostConn = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 def onKeyPress(pKey: Key, pConn: socket.socket):
     global selectedIp
-    # TODO: Refactor to do connection things in this function
 
     isKeyPressed = True
     keyStr = ""
@@ -41,8 +41,10 @@ def onKeyPress(pKey: Key, pConn: socket.socket):
         keyStr = pKey.char
     if (keyStr in targetIps.keys()):
         selectedIp = targetIps[keyStr]
-        data = inputStream.read(CLIENT_CHUNK, False)
-        conn.sendto(data, (selectedIp, config.PORT))
+        header = Signal.AUDIO.value
+        data = inputStream.read(CLIENT_CHUNK-HEADER_SIZE, False)
+        actualData = header + data
+        pConn.sendto(actualData, (selectedIp, config.PORT))
 
 def runServer(pStopEvent: Event):
     global running
@@ -53,15 +55,18 @@ def runServer(pStopEvent: Event):
         output=True,
         output_device_index=outputDeviceIndex)
     while ((running) and (not pStopEvent.is_set())):
-        print("running")
         if running:
-            #print("running")
             data, addr = hostConn.recvfrom(SERVER_CHUNK, socket.MSG_WAITALL)
-            if (data == stopSignal):
-                print("Stopping server")
-                running = False
+            header = data[:HEADER_SIZE]
+            actualData = data[HEADER_SIZE:]
+            if (header == Signal.AUDIO.value):
+                stream.write(actualData)
+            elif (header == Signal.STOP.value):
+                if ((actualData == stopToken) and (addr[0] == config.BIND_IP)):
+                    print("Stopping server")
+                    running = False
             else:
-                stream.write(data)
+                print("Invalid header: " + repr(header))
 
             if (pStopEvent.is_set()):
                 print("Exiting")
@@ -98,7 +103,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as conn:
             print("Stopping keyboard listener")
             listener.stop()
 
-    conn.sendto(stopSignal, (config.BIND_IP, config.PORT))
+    conn.sendto(Signal.STOP.value + stopToken, (config.BIND_IP, config.PORT))
 
 stopEvent.set()
 serverThread.join()
